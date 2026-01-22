@@ -5,6 +5,11 @@ export interface IUser {
   username: string;
   email: string;
   password: string;
+  profile?: {
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+  };
   followers: mongoose.Types.ObjectId[];
   following: mongoose.Types.ObjectId[];
 }
@@ -13,6 +18,11 @@ export interface IUserDocument extends Document {
   username: string;
   email: string;
   password: string;
+  profile?: {
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+  };
   followers: mongoose.Types.ObjectId[];
   following: mongoose.Types.ObjectId[];
 }
@@ -37,6 +47,11 @@ export const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6,
     select: false, // не возвращать в ответах
+  },
+  profile: {
+    firstName: String,
+    lastName: String,
+    bio: String,
   },
   followers: [
     {

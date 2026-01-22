@@ -6,7 +6,11 @@ interface CreateUserInput {
   username: string;
   email: string;
   password: string;
-  profile: string;
+  profile: {
+    firstName: string;
+    lastName: string;
+    bio: string;
+  };
   followers: mongoose.Types.ObjectId[];
   following: mongoose.Types.ObjectId[];
 }
@@ -15,7 +19,11 @@ interface UpdateUserInput {
   username: string;
   email: string;
   password: string;
-  profile: string;
+  profile: {
+    firstName: string;
+    lastName: string;
+    bio: string;
+  };
 }
 
 export interface PaginationQuery {
@@ -38,6 +46,8 @@ export async function getUsers(options: PaginationQuery) {
   }
 
   const users = await UserModel.find(filter)
+    .populate("followers", "username profile")
+    .populate("following", "username profile")
     .sort({ createdAt: -1 })
     .skip(offset)
     .limit(limit);
@@ -56,27 +66,29 @@ export async function getUsers(options: PaginationQuery) {
 }
 
 export async function getUserById(id: string) {
-  try {
-    const user = await UserModel.findById(id);
-    return user;
-  } catch (err) {
-    return null;
-  }
+  const user = await UserModel.findById(id)
+    .populate("followers", "username profile")
+    .populate("following", "username profile");
+  return user;
 }
 
 export async function createUser(input: CreateUserInput) {
   if (!input.username || input.username.trim() === "")
     throw new Error("Username is required");
-  const newUser = new UserModel({
+  const newUser = await UserModel.create({
     username: input.username,
     email: input.email,
     password: input.password,
-    profile: input.profile,
+    profile: {
+      firstName: input.profile.firstName,
+      lastName: input.profile.lastName,
+      bio: input.profile.bio,
+    },
   });
 
-  await newUser.save();
+  const user = await UserModel.findById(newUser._id);
 
-  return newUser;
+  return user;
 }
 
 export async function updateUser(id: string, input: UpdateUserInput) {
@@ -113,4 +125,71 @@ export async function patchUser(id: string, input: Partial<UpdateUserInput>) {
 export async function deleteUser(id: string) {
   const result = await UserModel.deleteOne({ _id: new ObjectId(id) });
   return result.deletedCount === 1;
+}
+
+export async function followUser(userId: string, targetUserId: string) {
+  if (userId === targetUserId) {
+    throw new Error("You cannot follow yourself");
+  }
+
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const targetObjectId = new mongoose.Types.ObjectId(targetUserId);
+
+  const user = await UserModel.findById(userObjectId);
+  const targetUser = await UserModel.findById(targetObjectId);
+
+  if (!user || !targetUser) {
+    throw new Error("User not found");
+  }
+
+  // если уже подписан — ничего не делаем
+  if (user.following.some((id) => id.equals(targetObjectId))) {
+    return {
+      user,
+      targetUser,
+      followed: false,
+    };
+  }
+
+  user.following.push(targetObjectId);
+  targetUser.followers.push(userObjectId);
+
+  await user.save();
+  await targetUser.save();
+
+  return {
+    user,
+    targetUser,
+    followed: true,
+  };
+}
+
+export async function unfollowUser(userId: string, targetUserId: string) {
+  if (userId === targetUserId) {
+    throw new Error("You cannot unfollow yourself");
+  }
+
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const targetObjectId = new mongoose.Types.ObjectId(targetUserId);
+
+  const user = await UserModel.findById(userObjectId);
+  const targetUser = await UserModel.findById(targetObjectId);
+
+  if (!user || !targetUser) {
+    throw new Error("User not found");
+  }
+
+  user.following = user.following.filter((id) => !id.equals(targetObjectId));
+  targetUser.followers = targetUser.followers.filter(
+    (id) => !id.equals(userObjectId),
+  );
+
+  await user.save();
+  await targetUser.save();
+
+  return {
+    user,
+    targetUser,
+    followed: false,
+  };
 }

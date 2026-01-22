@@ -1,5 +1,4 @@
 import express from "express";
-import mongoose from "mongoose";
 import {
   getUsers,
   getUserById,
@@ -7,8 +6,9 @@ import {
   updateUser,
   patchUser,
   deleteUser,
+  followUser,
+  unfollowUser,
 } from "../services/userService";
-import { UserModel } from "../models/User";
 
 const router = express.Router();
 
@@ -134,47 +134,43 @@ router.post("/users/:id/follow", async (req, res, next) => {
       return next(err);
     }
 
-    const targetUser = await UserModel.findById(targetUserId);
-    const currentUser = await UserModel.findById(currentUserId);
-
-    if (!targetUser) {
-      const err = new Error("User not found");
-      (err as any).status = 404;
-      return next(err);
-    }
-
-    if (!currentUser) {
-      const err = new Error("Current user not found");
-      (err as any).status = 404;
-      return next(err);
-    }
-
-    const currentUserObjectId = new mongoose.Types.ObjectId(currentUserId);
-
-    if (
-      !targetUser.followers.some(
-        (id) => id.toString() === currentUserObjectId.toString(),
-      )
-    ) {
-      targetUser.followers.push(currentUserObjectId);
-      await targetUser?.save();
-    }
-
-    const targetUserObjectId = new mongoose.Types.ObjectId(targetUserId);
-
-    if (
-      !targetUser.followers.some(
-        (id) => id.toString() === targetUserObjectId.toString(),
-      )
-    ) {
-      targetUser.followers.push(targetUserObjectId);
-      await targetUser?.save();
-    }
+    const result = await followUser(targetUserId, currentUserId);
 
     res.status(201).json({
       success: true,
-      data: targetUser,
-      followersCount: targetUser.followers.length,
+      data: result.targetUser,
+      followersCount: result.targetUser.followers.length,
+      followed: result.followed,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/users/:id/unfollow", async (req, res, next) => {
+  try {
+    const targetUserId = req.params.id;
+    const currentUserId = req.body.userId;
+
+    if (!currentUserId) {
+      const err = new Error("User ID is required to like post");
+      (err as any).status = 400;
+      return next(err);
+    }
+
+    if (currentUserId === targetUserId) {
+      const err = new Error("You cannot unfollow yourself");
+      (err as any).status = 400;
+      return next(err);
+    }
+
+    const result = await unfollowUser(currentUserId, targetUserId);
+
+    res.status(201).json({
+      success: true,
+      data: result.targetUser,
+      followersCount: result.targetUser.followers.length,
+      unfollowed: result.followed,
     });
   } catch (err) {
     next(err);

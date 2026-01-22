@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import mongoose from "mongoose";
 import { PostModel } from "../models/Post";
 
 interface CreatePostInput {
@@ -13,6 +14,15 @@ interface UpdatePostInput {
   content: string;
   author: string;
   excerpt?: string;
+}
+
+interface CreateComment {
+  text: string;
+  author: string;
+}
+
+interface ToggleLike {
+  userId: string;
 }
 
 export interface PaginationQuery {
@@ -31,11 +41,15 @@ export async function getPosts(options: PaginationQuery) {
   const filter: any = {};
 
   if (options.search) {
-    filter.title = { $regex: options.search, $options: "i" };
-    filter.content = { $regex: options.search, $options: "i" };
+    filter.$or = [
+      { title: { $regex: options.search, $options: "i" } },
+      { content: { $regex: options.search, $options: "i" } },
+    ];
   }
 
   const users = await PostModel.find(filter)
+    .populate("author", "username profile")
+    .populate("comments.author", "username profile")
     .sort({ createdAt: -1 })
     .skip(offset)
     .limit(limit);
@@ -55,8 +69,13 @@ export async function getPosts(options: PaginationQuery) {
 
 export async function getPostById(id: string) {
   try {
-    const user = await PostModel.findById(id);
-    return user;
+    const post = await PostModel.findById(id)
+      .populate("author", "username profile")
+      .populate("comments.author", "username profile");
+    if (!post) return null;
+    post.views += 1;
+    await post.save();
+    return post;
   } catch (err) {
     return null;
   }
@@ -109,6 +128,67 @@ export async function patchPost(id: string, input: Partial<UpdatePostInput>) {
 }
 
 export async function deletePost(id: string) {
-  const result = await PostModel.deleteOne({ _id: new ObjectId(id) });
-  return result.deletedCount === 1;
+  const result = await PostModel.findById({ _id: new ObjectId(id) });
+  return result;
+}
+
+export async function addComment(id: string, input: CreateComment) {
+  const post = await PostModel.findOne({ _id: new ObjectId(id) });
+
+  const commentObject = {
+    text: input.text,
+    author: new mongoose.Types.ObjectId(input.author),
+  };
+
+  if (!post) return null;
+
+  post.comments.push(commentObject);
+  await post.save();
+  return post;
+}
+
+export async function toggleLike(postId: string, input: ToggleLike) {
+  const post = await PostModel.findById(postId);
+  const userObjectId = new mongoose.Types.ObjectId(input.userId);
+
+  if (!post) return null;
+
+  if (!post.likes.some((id) => id.equals(userObjectId))) {
+    post.likes.push(userObjectId);
+  } else {
+    post.likes = post.likes.filter((id) => !id.equals(userObjectId));
+  }
+
+  await post.save();
+
+  return post;
+}
+
+export async function getPostsByAuthor(
+  authorId: string,
+  options: PaginationQuery,
+) {
+  const page = options.page ? parseInt(options.page) : 1;
+  const limit = options.limit ? parseInt(options.limit) : 10;
+  const offset = (page - 1) * limit;
+
+  const filter = { author: new mongoose.Types.ObjectId(authorId) };
+
+  const posts = await PostModel.find(filter)
+    .sort({ createdAt: -1 })
+    .skip(offset)
+    .limit(limit)
+    .populate("author", "username profile");
+
+  const total = await PostModel.countDocuments(filter);
+
+  return {
+    posts,
+    meta: {
+      total: total,
+      page: page,
+      limit: limit,
+      totalPage: Math.ceil(total / limit),
+    },
+  };
 }

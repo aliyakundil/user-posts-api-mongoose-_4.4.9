@@ -1,5 +1,4 @@
 import express from "express";
-import mongoose from "mongoose";
 import {
   getPosts,
   getPostById,
@@ -7,8 +6,11 @@ import {
   updatePost,
   patchPost,
   deletePost,
+  addComment,
+  toggleLike,
+  getPostsByAuthor,
 } from "../services/postService";
-import { PostModel } from "models/Post";
+import { PostModel } from "../models/Post";
 
 const router = express.Router();
 
@@ -60,13 +62,29 @@ router.post("/posts", async (req, res, next) => {
 router.put("/posts/:id", async (req, res, next) => {
   try {
     const id = req.params.id;
+    const postId = req.params.id;
     const result = await updatePost(id, req.body);
+
+    const post = await PostModel.findById(postId);
 
     if (!result) {
       return res.status(404).json({
         success: false,
         error: "Post not found",
       });
+    }
+
+    if (id !== result.author.toString()) {
+      res.status(403).json({
+        success: false,
+        data: "You are not allowed to modify this post",
+      });
+    }
+
+    if (!post) return null;
+
+    if (req.body.userId !== post.author.toString()) {
+      return res.status(403).json({ success: false, error: "Forbidden" });
     }
 
     res.status(200).json({ success: true, data: result });
@@ -78,7 +96,7 @@ router.put("/posts/:id", async (req, res, next) => {
 router.patch("/posts/:id", async (req, res, next) => {
   try {
     const id = req.params.id;
-
+    const postId = req.params.id;
     const body = req.body;
 
     if (!body || Object.keys(body).length === 0) {
@@ -93,6 +111,20 @@ router.patch("/posts/:id", async (req, res, next) => {
       const err = new Error("Not Found");
       (err as any).status = 400;
       return next(err);
+    }
+
+    if (id !== result.author.toString()) {
+      res.status(403).json({
+        success: false,
+        data: "You are not allowed to modify this post",
+      });
+    }
+
+    const post = await PostModel.findById(postId);
+    if (!post) return null;
+
+    if (req.body.userId !== post.author.toString()) {
+      return res.status(403).json({ success: false, error: "Forbidden" });
     }
 
     res.status(200).json({ success: true, data: result });
@@ -111,6 +143,15 @@ router.delete("/posts/:id", async (req, res, next) => {
       (err as any).status = 404;
       return next(err);
     }
+
+    if (id !== deleted.author.toString()) {
+      res.status(403).json({
+        success: false,
+        data: "You are not allowed to modify this post",
+      });
+    }
+
+    await deleted.deleteOne();
 
     return res.status(204).send();
   } catch (err) {
@@ -134,21 +175,13 @@ router.post("/posts/:id/comments", async (req, res, next) => {
       (err as any).status = 404;
       return next(err);
     }
-    const post = await PostModel.findById(postId);
+    const post = await addComment(postId, { text, author });
 
     if (!post) {
       const err = new Error("Post not found");
       (err as any).status = 404;
       return next(err);
     }
-
-    const commentObject = {
-      text: text.trim(),
-      author: new mongoose.Types.ObjectId(author),
-    };
-
-    post.comments.push(commentObject);
-    await post.save();
 
     res.status(201).json({
       success: true,
@@ -164,7 +197,6 @@ router.post("/posts/:id/like", async (req, res, next) => {
   try {
     const postId = req.params.id;
     const userId = req.body.userId;
-    const userObjectId = new mongoose.Types.ObjectId(userId);
 
     if (!userId) {
       const err = new Error("User ID is required to like post");
@@ -172,17 +204,12 @@ router.post("/posts/:id/like", async (req, res, next) => {
       return next(err);
     }
 
-    const post = await PostModel.findById(postId);
+    const post = await toggleLike(postId, userId);
 
     if (!post) {
       const err = new Error("Post not found");
       (err as any).status = 404;
       return next(err);
-    }
-
-    if (!post.likes.some((id) => id.toString() === userObjectId.toString())) {
-      post.likes.push(userObjectId);
-      await post?.save();
     }
 
     res.status(201).json({
@@ -196,3 +223,25 @@ router.post("/posts/:id/like", async (req, res, next) => {
 });
 
 export default router;
+
+router.get("/users/:id/posts", async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    const result = await getPostsByAuthor(userId, {
+      page: req.query.page as string,
+      limit: req.query.limit as string,
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: "Invalid post id",
+      });
+    }
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
