@@ -127,69 +127,67 @@ export async function deleteUser(id: string) {
   return result.deletedCount === 1;
 }
 
-export async function followUser(userId: string, targetUserId: string) {
-  if (userId === targetUserId) {
+export async function followUser(followerId: string, followingId: string) {
+  if (followerId === followingId) {
     throw new Error("You cannot follow yourself");
   }
 
-  const userObjectId = new mongoose.Types.ObjectId(userId);
-  const targetObjectId = new mongoose.Types.ObjectId(targetUserId);
+  const followerObjectId = new mongoose.Types.ObjectId(followerId);
+  const followingObjectId = new mongoose.Types.ObjectId(followingId);
 
-  const user = await UserModel.findById(userObjectId);
-  const targetUser = await UserModel.findById(targetObjectId);
+  const follower = await UserModel.findById(followerObjectId);
+  const following = await UserModel.findById(followingObjectId);
 
-  if (!user || !targetUser) {
+  if (!follower || !following) {
     throw new Error("User not found");
   }
 
   // если уже подписан — ничего не делаем
-  if (user.following.some((id) => id.equals(targetObjectId))) {
-    return {
-      user,
-      targetUser,
-      followed: false,
-    };
+  if (follower.following.some((id) => id.equals(followingObjectId))) {
+    return { follower, following, followed: false };
   }
 
-  user.following.push(targetObjectId);
-  targetUser.followers.push(userObjectId);
+  follower.following.push(followingObjectId);
+  following.followers.push(followerObjectId);
 
-  await user.save();
-  await targetUser.save();
+  await follower.save();
+  await following.save();
 
   return {
-    user,
-    targetUser,
+    follower,
+    following,
     followed: true,
   };
 }
 
-export async function unfollowUser(userId: string, targetUserId: string) {
-  if (userId === targetUserId) {
+export async function unfollowUser(followerId: string, followingId: string) {
+  if (followerId === followingId) {
     throw new Error("You cannot unfollow yourself");
   }
 
-  const userObjectId = new mongoose.Types.ObjectId(userId);
-  const targetObjectId = new mongoose.Types.ObjectId(targetUserId);
+  const followerObjectId = new mongoose.Types.ObjectId(followerId);
+  const followingObjectId = new mongoose.Types.ObjectId(followingId);
 
-  const user = await UserModel.findById(userObjectId);
-  const targetUser = await UserModel.findById(targetObjectId);
+  const follower = await UserModel.findById(followerObjectId);
+  const following = await UserModel.findById(followingObjectId);
 
-  if (!user || !targetUser) {
+  if (!follower || !following) {
     throw new Error("User not found");
   }
 
-  user.following = user.following.filter((id) => !id.equals(targetObjectId));
-  targetUser.followers = targetUser.followers.filter(
-    (id) => !id.equals(userObjectId),
+  follower.following = follower.following.filter(
+    (id) => !id.equals(followingObjectId)
+  );
+  following.followers = following.followers.filter(
+    (id) => !id.equals(followerObjectId)
   );
 
-  await user.save();
-  await targetUser.save();
+  await follower.save();
+  await following.save();
 
   return {
-    user,
-    targetUser,
+    follower,
+    following,
     followed: false,
   };
 }

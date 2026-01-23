@@ -138,8 +138,8 @@ router.post("/users/:id/follow", async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      data: result.targetUser,
-      followersCount: result.targetUser.followers.length,
+      data: result.following,
+      followersCount: result.following.followers.length,
       followed: result.followed,
     });
   } catch (err) {
@@ -168,9 +168,9 @@ router.post("/users/:id/unfollow", async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      data: result.targetUser,
-      followersCount: result.targetUser.followers.length,
-      unfollowed: result.followed,
+      data: result.following,
+      followersCount: result.following.followers.length,
+      unfollowed: result.follower,
     });
   } catch (err) {
     next(err);
