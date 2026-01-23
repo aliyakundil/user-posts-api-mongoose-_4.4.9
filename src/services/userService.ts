@@ -176,10 +176,10 @@ export async function unfollowUser(followerId: string, followingId: string) {
   }
 
   follower.following = follower.following.filter(
-    (id) => !id.equals(followingObjectId)
+    (id) => !id.equals(followingObjectId),
   );
   following.followers = following.followers.filter(
-    (id) => !id.equals(followerObjectId)
+    (id) => !id.equals(followerObjectId),
   );
 
   await follower.save();
